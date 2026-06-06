@@ -1,0 +1,8 @@
+{
+  "name": "Snake Bit Games",
+  "description": "Retro Snake arcade variants with a full developer asset studio, PWA bundle packager, and Play Store submission suite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
