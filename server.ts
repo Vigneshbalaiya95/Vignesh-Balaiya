@@ -3,6 +3,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
+import { PolymarketEngine } from './server/polymarket/engine';
+import { analyzeWithAi } from './server/polymarket/llm';
 
 dotenv.config();
 
@@ -168,6 +170,49 @@ Perfect for ${targetAudience || 'arcade fans, puzzle lovers, and veterans of the
       note: 'GEMINI_API_KEY secrets key is unconfigured. Showing responsive offline template copy.',
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Polymarket crypto desk: real-time multi-model analysis (paper trading only)
+// ---------------------------------------------------------------------------
+const polymarket = new PolymarketEngine();
+polymarket.start();
+
+app.get('/api/polymarket/snapshot', (_req, res) => {
+  const snap = polymarket.getSnapshot();
+  if (!snap) return res.status(503).json({ error: 'Engine warming up' });
+  return res.json(snap);
+});
+
+// Server-Sent Events stream: one snapshot per engine tick (~5s).
+app.get('/api/polymarket/stream', (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  const unsubscribe = polymarket.subscribe((snap) => {
+    res.write(`data: ${JSON.stringify(snap)}\n\n`);
+  });
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 20_000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
+
+app.post('/api/polymarket/settings', (req, res) => {
+  return res.json({ settings: polymarket.updateSettings(req.body ?? {}) });
+});
+
+app.post('/api/polymarket/analyze/:marketId', async (req, res) => {
+  const signal = polymarket.getSignal(req.params.marketId);
+  if (!signal) return res.status(404).json({ error: 'Market not found in current snapshot' });
+  const result = await analyzeWithAi(signal);
+  polymarket.recompute();
+  return res.json({ ...result, signal: polymarket.getSignal(req.params.marketId) ?? signal });
 });
 
 // Setup Vite Dev Server / Static Assets Production Routing

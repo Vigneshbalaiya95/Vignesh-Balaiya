@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import ArcadeStation from './components/ArcadeStation';
 import PlayStoreStudio from './components/PlayStoreStudio';
 import SubmissionWizard from './components/SubmissionWizard';
+import PolymarketDesk from './components/PolymarketDesk';
 import { GameTheme } from './types';
-import { Gamepad2, Sparkles, HelpCircle, Monitor, BookOpen } from 'lucide-react';
+import { Gamepad2, Sparkles, HelpCircle, Monitor, BookOpen, TrendingUp } from 'lucide-react';
 
 export default function App() {
-  // Navigation tabs state: 'arcade' | 'studio' | 'wizard'
-  const [currentTab, setCurrentTab] = useState<'arcade' | 'studio' | 'wizard'>('arcade');
+  // Navigation tabs state: 'arcade' | 'studio' | 'wizard' | 'polymarket'
+  const [currentTab, setCurrentTab] = useState<'arcade' | 'studio' | 'wizard' | 'polymarket'>('arcade');
   
   // High score / Screenshot assets catalog
   const [capturedScreenshots, setCapturedScreenshots] = useState<string[]>([]);
@@ -122,6 +123,18 @@ export default function App() {
             <BookOpen className={`w-4 h-4 ${currentTab === 'wizard' ? 'text-[#4ADE80]' : 'text-white/35'}`} />
             <span>Launch Checklist</span>
           </button>
+
+          <button
+            onClick={() => setCurrentTab('polymarket')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm cursor-pointer transition-all ${
+              currentTab === 'polymarket'
+                ? 'bg-white/5 border-r-2 border-[#4ADE80] text-emerald-400 font-medium'
+                : 'text-white/50 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <TrendingUp className={`w-4 h-4 ${currentTab === 'polymarket' ? 'text-[#4ADE80]' : 'text-white/35'}`} />
+            <span>Polymarket Crypto Desk</span>
+          </button>
           
           <div className="text-[10px] uppercase tracking-widest text-white/30 mb-2 mt-8 px-3 font-mono">System Specs</div>
           <div className="px-3 text-[10px] text-white/40 font-mono space-y-1 bg-white/[0.01] p-2.5 rounded border border-white/5">
@@ -171,6 +184,7 @@ export default function App() {
             { id: 'arcade', label: 'Play Game Pipeline', icon: Gamepad2 },
             { id: 'studio', label: 'Store Assets Studio', icon: Sparkles },
             { id: 'wizard', label: 'Launch Checklist', icon: BookOpen },
+            { id: 'polymarket', label: 'Polymarket Desk', icon: TrendingUp },
           ].map(tab => {
             const active = currentTab === tab.id;
             return (
@@ -253,6 +267,8 @@ export default function App() {
             {currentTab === 'wizard' && (
               <SubmissionWizard />
             )}
+
+            {currentTab === 'polymarket' && <PolymarketDesk />}
           </div>
         </section>
 
