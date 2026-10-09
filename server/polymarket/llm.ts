@@ -105,17 +105,35 @@ export function cachedOpinions(marketId: string): AiOpinion[] {
   return fresh;
 }
 
-/** Ask every configured provider in parallel; failures are reported, not thrown. */
-export async function analyzeWithAi(s: MarketSignal): Promise<{ opinions: AiOpinion[]; errors: string[] }> {
+type AnalysisResult = { opinions: AiOpinion[]; errors: string[] };
+const inFlight = new Map<string, Promise<AnalysisResult>>();
+
+/**
+ * Ask every configured provider in parallel; failures are reported, not thrown.
+ * Providers with a fresh cached opinion are not called again, and concurrent requests for the
+ * same market share one call, so spend is at most one call per provider per market per CACHE_MS.
+ */
+export function analyzeWithAi(s: MarketSignal): Promise<AnalysisResult> {
+  const id = s.market.id;
+  const pending = inFlight.get(id);
+  if (pending) return pending;
+  const run = runAnalysis(s).finally(() => inFlight.delete(id));
+  inFlight.set(id, run);
+  return run;
+}
+
+async function runAnalysis(s: MarketSignal): Promise<AnalysisResult> {
   const enabled = aiProviders();
-  const jobs: Array<Promise<AiOpinion>> = [];
-  if (enabled.claude) jobs.push(askClaude(s));
-  if (enabled.gemini) jobs.push(askGemini(s));
-  if (!jobs.length) {
+  if (!enabled.claude && !enabled.gemini) {
     return { opinions: [], errors: ['No AI provider configured. Set ANTHROPIC_API_KEY and/or GEMINI_API_KEY.'] };
   }
+  const cached = cachedOpinions(s.market.id);
+  const isCached = (p: AiOpinion['provider']) => cached.some((o) => o.provider === p);
+  const jobs: Array<Promise<AiOpinion>> = [];
+  if (enabled.claude && !isCached('claude')) jobs.push(askClaude(s));
+  if (enabled.gemini && !isCached('gemini')) jobs.push(askGemini(s));
   const settled = await Promise.allSettled(jobs);
-  const opinions: AiOpinion[] = [];
+  const opinions: AiOpinion[] = [...cached];
   const errors: string[] = [];
   for (const r of settled) {
     if (r.status === 'fulfilled') {

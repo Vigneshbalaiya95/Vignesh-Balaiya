@@ -34,6 +34,24 @@ test('parses common Polymarket crypto question formats', () => {
   assert.equal(parseQuestion('Will Bitcoin hit 2027 highs?', 110_000), null);
 });
 
+test('ignores numbers that are not price levels for the asset', () => {
+  assert.equal(parseQuestion('Will XRP ETF inflows exceed $10 million in October?', 2.2), null);
+  assert.equal(parseQuestion('Will Solana TPS exceed 1,000 in October?', 210), null);
+  assert.equal(parseQuestion('Will Bitcoin dominance be above 60% on Friday?', 110_000), null);
+  assert.equal(
+    parseQuestion('Will Bitcoin ETF inflows be between $1 billion and $2 billion this week?', 110_000),
+    null,
+  );
+  // Magnitude words still work for genuine price targets, and bare numbers near spot are accepted.
+  assert.deepEqual(parseQuestion('Will Bitcoin reach $1 million by 2030?', 110_000), {
+    asset: 'BTC',
+    kind: 'touch-up',
+    strike: 1_000_000,
+  });
+  assert.equal(parseQuestion('Will the price of Bitcoin be above 110,000 on October 10?', 108_000)?.strike, 110_000);
+  assert.equal(parseQuestion('Will XRP be below $2.50 by Friday?', 2.2)?.strike, 2.5);
+});
+
 test('math primitives', () => {
   assert.ok(Math.abs(normCdf(0) - 0.5) < 1e-7);
   assert.ok(Math.abs(normCdf(1.96) - 0.975) < 1e-3);

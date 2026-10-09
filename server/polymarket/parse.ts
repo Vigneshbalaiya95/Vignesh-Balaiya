@@ -8,13 +8,35 @@ const ASSET_PATTERNS: Array<[CryptoAsset, RegExp]> = [
   ['XRP', /\b(xrp|ripple)\b/i],
 ];
 
-const NUMBER = String.raw`\$?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s?([kKmM]\b)?`;
+// Groups: optional "$", digits, optional magnitude suffix ("150k", "$1 million", "$2bn").
+const NUMBER = String.raw`(\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s?(k|thousand|mn?|million|bn?|billion|trillion)\b)?`;
+
+const MAGNITUDE: Record<string, number> = {
+  k: 1e3,
+  thousand: 1e3,
+  m: 1e6,
+  mn: 1e6,
+  million: 1e6,
+  b: 1e9,
+  bn: 1e9,
+  billion: 1e9,
+  trillion: 1e12,
+};
 
 function toNumber(digits: string, suffix?: string): number {
-  let n = parseFloat(digits.replace(/,/g, ''));
-  if (suffix && /k/i.test(suffix)) n *= 1_000;
-  if (suffix && /m/i.test(suffix)) n *= 1_000_000;
-  return n;
+  const n = parseFloat(digits.replace(/,/g, ''));
+  return suffix ? n * (MAGNITUDE[suffix.toLowerCase()] ?? 1) : n;
+}
+
+/**
+ * Rejects numbers that cannot be a price level for the asset (years, percentages, TPS,
+ * "$10 million" of ETF inflows...). Bare numbers without "$" must be close to spot.
+ */
+function plausibleStrike(strike: number, hasDollar: boolean, spotHint?: number): boolean {
+  if (!(strike > 0)) return false;
+  if (!spotHint) return true;
+  const [lo, hi] = hasDollar ? [0.05, 20] : [1 / 3, 3];
+  return strike >= spotHint * lo && strike <= spotHint * hi;
 }
 
 export function detectAsset(text: string): CryptoAsset | null {
@@ -34,9 +56,15 @@ export function parseQuestion(question: string, spotHint?: number): ParsedContra
 
   const between = new RegExp(`between ${NUMBER} and ${NUMBER}`, 'i').exec(q);
   if (between) {
-    const lo = toNumber(between[1], between[2]);
-    const hi = toNumber(between[3], between[4]);
-    if (lo > 0 && hi > lo) return { asset, kind: 'between', strike: lo, upper: hi };
+    const lo = toNumber(between[2], between[3]);
+    const hi = toNumber(between[5], between[6]);
+    if (
+      hi > lo &&
+      plausibleStrike(lo, Boolean(between[1]), spotHint) &&
+      plausibleStrike(hi, Boolean(between[4]), spotHint)
+    ) {
+      return { asset, kind: 'between', strike: lo, upper: hi };
+    }
   }
 
   const patterns: Array<[ParsedContract['kind'], RegExp]> = [
@@ -48,10 +76,8 @@ export function parseQuestion(question: string, spotHint?: number): ParsedContra
   for (const [kind, re] of patterns) {
     const m = re.exec(q);
     if (!m) continue;
-    const strike = toNumber(m[2], m[3]);
-    if (!(strike > 0)) continue;
-    // Reject obviously wrong matches such as years or percentages.
-    if (spotHint && (strike < spotHint * 0.05 || strike > spotHint * 20)) continue;
+    const strike = toNumber(m[3], m[4]);
+    if (!plausibleStrike(strike, Boolean(m[2]), spotHint)) continue;
     return { asset, kind, strike };
   }
   return null;
